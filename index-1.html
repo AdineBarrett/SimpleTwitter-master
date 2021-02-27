@@ -1,0 +1,330 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><title>Unknown </title></head><body>
+<h1 id="restclienttemplate">RestClientTemplate <a href="https://travis-ci.org/codepath/android-rest-client-template"><img alt="Build Status" src="https://travis-ci.org/codepath/android-rest-client-template.svg?branch=master" /></a></h1>
+<h2 id="overview">Overview</h2>
+<p>RestClientTemplate is a skeleton Android project that makes writing Android apps sourced from OAuth JSON REST APIs as easy as possible. This skeleton project
+combines the best libraries and structure to enable quick development of rich API clients. The following things are supported out of the box:</p>
+<ul>
+<li>Authenticating with any OAuth 1.0a or OAuth 2 API</li>
+<li>Sending requests for and parsing JSON API data using a defined client</li>
+<li>Persisting data to a local SQLite store through an ORM layer</li>
+<li>Displaying and caching remote image data into views</li>
+</ul>
+<p>The following libraries are used to make this possible:</p>
+<ul>
+<li><a href="https://github.com/fernandezpablo85/scribe-java">scribe-java</a> - Simple OAuth library for handling the authentication flow.</li>
+<li><a href="https://github.com/codepath/AsyncHttpClient">Android Async HTTP</a> - Simple asynchronous HTTP requests with JSON parsing</li>
+<li><a href="https://github.com/thecodepath/android-oauth-handler">codepath-oauth</a> - Custom-built library for managing OAuth authentication and signing of requests</li>
+<li><a href="https://github.com/bumptech/glide">Glide</a> - Used for async image loading and caching them in memory and on disk.</li>
+<li><a href="https://developer.android.com/training/data-storage/room/index.html">Room</a> - Simple ORM for persisting a local SQLite database on the Android device</li>
+</ul>
+<h2 id="usage">Usage</h2>
+<h3 id="1-configure-the-rest-client">1. Configure the REST client</h3>
+<p>Open <code>src/com.codepath.apps.restclienttemplate/RestClient.java</code>. Configure the <code>REST_API_INSTANCE</code> and<code>REST_URL</code>.</p>
+<p>For example if I wanted to connect to Twitter:</p>
+<p><code>java
+// RestClient.java
+public class RestClient extends OAuthBaseClient {
+    public static final BaseApi REST_API_INSTANCE = TwitterApi.instance();
+    public static final String REST_URL = "https://api.twitter.com/1.1";
+    public static final String REST_CONSUMER_KEY = BuildConfig.CONSUMER_KEY;       // Change this inside apikey.properties
+    public static final String REST_CONSUMER_SECRET = BuildConfig.CONSUMER_SECRET; // Change this inside apikey.properties
+    // ...constructor and endpoints
+}</code></p>
+<p>Rename the <code>apikey.properties.example</code> file to <code>apikey.properties</code>.   Replace the <code>CONSUMER_KEY</code> and <code>CONSUMER_SECRET</code> to the values specified in the Twitter console:</p>
+<p>CONSUMER_KEY="adsflfajsdlfdsajlafdsjl"
+CONSUMER_SECRET="afdsljkasdflkjsd"</p>
+<p>Next, change the <code>intent_scheme</code> and <code>intent_host</code> in <code>strings.xml</code> to a unique name that is special for this application.
+This is used for the OAuth authentication flow for launching the app through web pages through an <a href="https://developer.chrome.com/multidevice/android/intents">Android intent</a>.</p>
+<p><code>xml
+&lt;string name="intent_scheme"&gt;oauth&lt;/string&gt;
+&lt;string name="intent_host"&gt;codepathtweets&lt;/string&gt;</code></p>
+<p>Next, you want to define the endpoints which you want to retrieve data from or send data to within your client:</p>
+<p><code>java
+// RestClient.java
+public void getHomeTimeline(int page, JsonHttpResponseHandler handler) {
+  String apiUrl = getApiUrl("statuses/home_timeline.json");
+  RequestParams params = new RequestParams();
+  params.put("page", String.valueOf(page));
+  getClient().get(apiUrl, params, handler);
+}</code></p>
+<p>Note we are using <code>getApiUrl</code> to get the full URL from the relative fragment and <code>RequestParams</code> to control the request parameters.
+You can easily send post requests (or put or delete) using a similar approach:</p>
+<p><code>java
+// RestClient.java
+public void postTweet(String body, JsonHttpResponseHandler handler) {
+    String apiUrl = getApiUrl("statuses/update.json");
+    RequestParams params = new RequestParams();
+    params.put("status", body);
+    getClient().post(apiUrl, params, handler);
+}</code></p>
+<p>These endpoint methods will automatically execute asynchronous requests signed with the authenticated access token. To use JSON endpoints, simply invoke the method
+with a <code>JsonHttpResponseHandler</code> handler:</p>
+<p><code>java
+// SomeActivity.java
+RestClient client = RestApplication.getRestClient();
+client.getHomeTimeline(1, new JsonHttpResponseHandler() {
+    @Override
+    public void onSuccess(int statusCode, Headers headers, JSON json) {
+    // json.jsonArray.getJSONObject(0).getLong("id");
+  }
+});</code></p>
+<p>Based on the JSON response (array or object), you need to declare the expected type inside the OnSuccess signature i.e
+<code>public void onSuccess(JSONObject json)</code>. If the endpoint does not return JSON, then you can use the <code>AsyncHttpResponseHandler</code>:</p>
+<p><code>java
+RestClient client = RestApplication.getRestClient();
+client.getSomething(new JsonHttpResponseHandler() {
+    @Override
+    public void onSuccess(int statusCode, Headers headers, String response) {
+        System.out.println(response);
+    }
+});</code>
+Check out <a href="https://github.com/codepath/AsyncHttpClient">Android Async HTTP Docs</a> for more request creation details.</p>
+<h3 id="2-define-the-models">2. Define the Models</h3>
+<p>In the <code>src/com.codepath.apps.restclienttemplate.models</code>, create the models that represent the key data to be parsed and persisted within your application.</p>
+<p>For example, if you were connecting to Twitter, you would want a Tweet model as follows:</p>
+<p>```java
+// models/Tweet.java
+package com.codepath.apps.restclienttemplate.models;</p>
+<p>import androidx.room.ColumnInfo;
+import androidx.room.Embedded;</p>
+<p>import androidx.room.Entity;
+import androidx.room.PrimaryKey;</p>
+<p>import org.json.JSONException;
+import org.json.JSONObject;</p>
+<p>@Entity
+public class Tweet {
+  // Define database columns and associated fields
+  @PrimaryKey
+  @ColumnInfo
+  Long id;
+  @ColumnInfo
+  String userHandle;
+  @ColumnInfo
+  String timestamp;
+  @ColumnInfo
+  String body;</p>
+<p>// Use @Embedded to keep the column entries as part of the same table while still
+  // keeping the logical separation between the two objects.
+  @Embedded
+  User user;
+}
+```</p>
+<p>Note there is a separate <code>User</code> object but it will not actually be declared as a separate table.  By using the <code>@Embedded</code> annotation, the fields in this class will be stored as part of the Tweet table.  Room specifically does not load references between two different entities for performance reasons (see https://developer.android.com/training/data-storage/room/referencing-data), so declaring it this way causes the data to be denormalized as one table.</p>
+<p>```java
+// models/User.java</p>
+<p>public class User {</p>
+<pre><code>@ColumnInfo
+String name;
+
+// normally this field would be annotated @PrimaryKey because this is an embedded object
+// it is not needed
+@ColumnInfo  
+Long twitter_id;
+</code></pre>
+<p>}
+```
+Notice here we specify the SQLite table for a resource, the columns for that table, and a constructor for turning the JSON object fetched from the API into this object. For more information on creating a model, check out the <a href="https://developer.android.com/training/data-storage/room/">Room guide</a>.</p>
+<p>In addition, we also add functions into the model to support parsing JSON attributes in order to instantiate the model based on API data.  For the User object, the parsing logic would be:</p>
+<p>```java
+// Parse model from JSON
+public static User parseJSON(JSONObject tweetJson) {</p>
+<pre><code>User user = new User();
+this.twitter_id = tweetJson.getLong("id");
+this.name = tweetJson.getString("name");
+return user;
+</code></pre>
+<p>}
+```</p>
+<p>For the Tweet object, the logic would would be:</p>
+<p>```java
+// models/Tweet.java
+@Entity
+public class Tweet {
+  // ...existing code from above...</p>
+<p>// Add a constructor that creates an object from the JSON response
+  public Tweet(JSONObject object){
+    try {
+      this.user = User.parseJSON(object.getJSONObject("user"));
+      this.userHandle = object.getString("user_username");
+      this.timestamp = object.getString("timestamp");
+      this.body = object.getString("body");
+    } catch (JSONException e) {
+      e.printStackTrace();
+    }
+  }</p>
+<p>public static ArrayList<Tweet> fromJson(JSONArray jsonArray) {
+    ArrayList<Tweet> tweets = new ArrayList<Tweet>(jsonArray.length());</p>
+<pre><code>for (int i=0; i &lt; jsonArray.length(); i++) {
+    JSONObject tweetJson = null;
+    try {
+        tweetJson = jsonArray.getJSONObject(i);
+    } catch (Exception e) {
+        e.printStackTrace();
+        continue;
+    }
+
+    Tweet tweet = new Tweet(tweetJson);
+    tweets.add(tweet);
+}
+
+return tweets;
+</code></pre>
+<p>}
+}
+```</p>
+<p>Now you have a model that supports proper creation based on JSON. Create models for all the resources necessary for your mobile client.</p>
+<h3 id="4-define-your-queries">4. Define your queries</h3>
+<p>Next, you will need to define the queries by creating a Data Access Object (DAO) class.   Here is an example of declaring queries to return a Tweet by the post ID, retrieve the most recent tweets, and insert tweets.   </p>
+<p>```java</p>
+<p>import androidx.room.Dao;
+import androidx.room.Insert;
+import androidx.room.OnConflictStrategy;
+import androidx.room.Query;</p>
+<p>import java.util.List;</p>
+<p>@Dao
+public interface TwitterDao {
+    // Record finders
+    @Query("SELECT * FROM Tweet WHERE post_id = :tweetId")
+    Tweet byTweetId(Long tweetId);</p>
+<pre><code>@Query("SELECT * FROM Tweet ORDER BY created_at")
+List&lt;Tweet&gt; getRecentTweets();
+
+// Replace strategy is needed to ensure an update on the table row.  Otherwise the insertion will
+// fail.
+@Insert(onConflict = OnConflictStrategy.REPLACE)
+void insertTweet(Tweet... tweets);
+</code></pre>
+<p>}
+```</p>
+<p>The examples here show how to perform basic queries on the Tweet table.  If you need to declare one-to-many or many-to-many relations, see the guides on using the <a href="https://developer.android.com/reference/android/arch/persistence/room/Relation">@Relation</a> and <a href="https://developer.android.com/reference/android/arch/persistence/room/ForeignKey">@ForeignKey</a> annotations.</p>
+<h3 id="5-create-database">5. Create database</h3>
+<p>We need to define a database that extends <code>RoomDatabase</code> and describe which entities as part of this database. We also need to include what data access objects are to be included.  If the entities are modified or additional ones are included, the version number will need to be changed.  Note that only the <code>Tweet</code> class is declared:</p>
+<p>```java
+// bump version number if your schema changes
+@Database(entities={Tweet.class}, version=1)
+public abstract class MyDatabase extends RoomDatabase {
+  // Declare your data access objects as abstract
+  public abstract TwitterDao twitterDao();</p>
+<p>// Database name to be used
+  public static final String NAME = "MyDataBase";</p>
+<p>```    </p>
+<p>When compiling the code, the schemas will be stored in a <code>schemas/</code> directory assuming this statement
+has been included your <code>app/build.gradle</code> file.  These schemas should be checked into your code based.</p>
+<p>```gradle
+android {
+    defaultConfig {</p>
+<pre><code>    javaCompileOptions {
+        annotationProcessorOptions {
+            arguments = ["room.schemaLocation": "$projectDir/schemas".toString()]
+        }
+    }
+}
+</code></pre>
+<p>}
+```</p>
+<h3 id="6-initialize-database">6. Initialize database</h3>
+<p>Inside your application class, you will need to initialize the database and specify a name for it.</p>
+<p>```java
+public class RestClientApp extends Application {</p>
+<p>MyDatabase myDatabase;</p>
+<p>@Override
+  public void onCreate() {
+    // when upgrading versions, kill the original tables by using fallbackToDestructiveMigration()
+    myDatabase = Room.databaseBuilder(this, MyDatabase.class, MyDatabase.NAME).fallbackToDestructiveMigration().build();
+  }</p>
+<p>public MyDatabase getMyDatabase() {
+    return myDatabase;
+  }</p>
+<p>}
+```</p>
+<h3 id="7-setup-your-authenticated-activities">7. Setup Your Authenticated Activities</h3>
+<p>Open <code>src/com.codepath.apps.restclienttemplate/LoginActivity.java</code> and configure the <code>onLoginSuccess</code> method
+which fires once your app has access to the authenticated API. Launch an activity and begin using your REST client:</p>
+<p><code>java
+// LoginActivity.java
+@Override
+public void onLoginSuccess() {
+  Intent i = new Intent(this, TimelineActivity.class);
+  startActivity(i);
+}</code></p>
+<p>In your new authenticated activity, you can access your client anywhere with:</p>
+<p><code>java
+RestClient client = RestApplication.getRestClient();
+client.getHomeTimeline(1, new JsonHttpResponseHandler() {
+  public void onSuccess(int statusCode, Headers headers, JSON json) {
+    Log.d("DEBUG", "timeline: " + json.jsonArray.toString());
+    // Load json array into model classes
+  }
+});</code></p>
+<p>You can then load the data into your models from a <code>JSONArray</code> using:</p>
+<p><code>java
+ArrayList&lt;Tweet&gt; tweets = Tweet.fromJSON(jsonArray);</code></p>
+<p>or load the data from a single <code>JSONObject</code> with:</p>
+<p><code>java
+Tweet t = new Tweet(json);
+// t.body = "foo"</code></p>
+<p>To save, you will need to perform the database operation on a separate thread by creating an <code>AsyncTask</code> and adding the item:</p>
+<p><code>java
+AsyncTask&lt;Tweet, Void, Void&gt; task = new AsyncTask&lt;Tweet, Void, Void&gt;() {
+    @Override
+    protected Void doInBackground(Tweet... tweets) {
+      TwitterDao twitterDao = ((RestApplication) getApplicationContext()).getMyDatabase().twitterDao();
+      twitterDao.insertModel(tweets);
+      return null;
+    };
+  };
+  task.execute(tweets);</code></p>
+<p>That's all you need to get started. From here, hook up your activities and their behavior, adjust your models and add more REST endpoints.</p>
+<h3 id="extras">Extras</h3>
+<h4 id="loading-images-with-glide">Loading Images with Glide</h4>
+<p>If you want to load a remote image url into a particular ImageView, you can use Glide to do that with:</p>
+<p><code>java
+Glide.with(this).load(imageUrl)
+     .into(imageView);</code></p>
+<p>This will load an image into the specified ImageView and resize the image to fit.</p>
+<h4 id="logging-out">Logging Out</h4>
+<p>You can log out by clearing the access token at any time through the client object:</p>
+<p><code>java
+RestClient client = RestApplication.getRestClient();
+client.clearAccessToken();</code></p>
+<h3 id="viewing-sql-table">Viewing SQL table</h3>
+<p>You can use <code>chrome://inspect</code> to view the SQL tables once the app is running on your emulator.  See <a href="https://guides.codepath.com/android/Debugging-with-Stetho">this guide</a> for more details.</p>
+<h3 id="adding-oauth2-support">Adding OAuth2 support</h3>
+<p>Google uses OAuth2 APIs so make sure to use the <code>GoogleApi20</code> instance:</p>
+<p><code>java
+public static final BaseApi REST_API_INSTANCE = GoogleApi20.instance();</code></p>
+<p>Change <code>REST_URL</code> to use the Google API:</p>
+<p><code>java
+public static final String REST_URL = "https://www.googleapis.com/calendar/v3"; // Change this, base API URL</code></p>
+<p>The consumer and secret keys should be retrieved via <a href="https://console.developers.google.com/apis/credentials">the credentials section</a> in the Google developer console  You will need to create an OAuth2 client ID and client secret.</p>
+<p>Create a file called <code>apikey.properties</code>: </p>
+<p><code>java
+REST_CONSUMER_KEY="XXX-XXX.apps.googleusercontent.com"
+REST_CONSUMER_SECRET="XX-XXXXXXX"</code></p>
+<p>The OAuth2 scopes should be used according to the ones defined in <a href="https://developers.google.com/identity/protocols/googlescopes">the OAuth2 scopes</a>:</p>
+<p><code>java
+public static final String OAUTH2_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";</code></p>
+<p>Make sure to pass this value into the scope parameter:</p>
+<p><code>java
+public RestClient(Context context) {
+        super(context, REST_API_INSTANCE,
+                REST_URL,
+                REST_CONSUMER_KEY,
+                REST_CONSUMER_SECRET,
+                OAUTH2_SCOPE,  // OAuth2 scope, null for OAuth1
+                String.format(REST_CALLBACK_URL_TEMPLATE, context.getString(R.string.intent_host),
+                        context.getString(R.string.intent_scheme), context.getPackageName(), FALLBACK_URL));
+    }</code>
+Google only accepts <code>http://</code> or <code>https://</code> domains, so your <code>REST_CALLBACK_URL_TEMPLATE</code> will need to be adjusted:</p>
+<p><code>java
+public static final String REST_CALLBACK_URL_TEMPLATE = "https://localhost";</code></p>
+<p>Make sure to update the <code>cprest</code> and <code>intent_host</code> to match this callback URL . </p>
+<h3 id="troubleshooting">Troubleshooting</h3>
+<ul>
+<li>If you receive the following error <code>org.scribe.exceptions.OAuthException: Cannot send unauthenticated requests for TwitterApi client. Please attach an access token!</code> then check the following:</li>
+<li>Is your intent-filter with <code>&lt;data&gt;</code> attached to the <code>LoginActivity</code>? If not, make sure that the <code>LoginActivity</code> receives the request after OAuth authorization.</li>
+<li>Is the <code>onLoginSuccess</code> method being executed in the <code>LoginActivity</code>. On launch of your app, be sure to start the app on the LoginActivity so authentication routines execute on launch and take you to the authenticated activity.</li>
+<li>If you are plan to test with Android API 24 or above, you will need to use Chrome to launch the OAuth flow.  </li>
+<li>Note that the emulators (both the Google-provided x86 and Genymotion versions) for API 24+ versions can introduce intermittent issues when initiating the OAuth flow for the first time.  For best results, use an device for this project.</li>
+</ul>
+</body></html>
